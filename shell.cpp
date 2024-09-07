@@ -13,7 +13,7 @@ void handle_pipe(char *line);    // Maneja comandos con pipes
 
 // Función principal (main)
 int main() {
-    printf("Bienvenido a MiShell. Escribe 'exit' para salir.\n");
+    printf("Bienvenido a nuestra Shell. Escribe 'exit' para salir.\n");
     shell_loop();
     return 0;
 }
@@ -24,7 +24,7 @@ void shell_loop() {
     size_t len = 0;
 
     while (1) {
-        printf("mishell:$ ");
+        printf("shell:$ ");
         if (getline(&line, &len, stdin) == -1) {
             perror("Error leyendo comando");
             exit(EXIT_FAILURE);
