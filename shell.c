@@ -5,11 +5,11 @@
 #include <sys/wait.h>
 
 // Prototipos de funciones
-void shell_loop();            // Bucle principal de la shell
-void process_command(char *line); // Procesa el comando ingresado
-void parse_command(char *line, char **args); // Parsea la línea de entrada
-void execute_command(char **args); // Ejecuta el comando
-void handle_pipe(char *line);    // Maneja comandos con pipes
+void shell_loop();
+void process_command(char *line);
+void parse_command(char *line, char **args);
+void execute_command(char **args);
+void handle_pipe(char *line);
 
 // Función principal (main)
 int main() {
@@ -93,49 +93,74 @@ void execute_command(char **args) {
     }
 }
 
-// Maneja el pipe entre dos comandos
+// Maneja múltiples pipes entre varios comandos
 void handle_pipe(char *line) {
-    char *commands[2];
-    char *cmd1[10], *cmd2[10];
-    int pipefd[2];
+    char *commands[100];
+    char *args[100][10];
+    int num_commands = 0;
+    int pipefd[100][2];
 
-    commands[0] = strtok(line, "|");
-    commands[1] = strtok(NULL, "|");
-
-    parse_command(commands[0], cmd1);
-    parse_command(commands[1], cmd2);
-
-    if (pipe(pipefd) == -1) {
-        perror("Error creando pipe");
-        exit(EXIT_FAILURE);
+    // Divide el input en varios comandos usando el delimitador '|'
+    char *token = strtok(line, "|");
+    while (token != NULL) {
+        commands[num_commands] = token;
+        token = strtok(NULL, "|");
+        num_commands++;
     }
 
-    pid_t pid1, pid2;
-    pid1 = fork();
-    if (pid1 == 0) { // Primer proceso
-        dup2(pipefd[1], STDOUT_FILENO);
-        close(pipefd[0]);
-        close(pipefd[1]);
-        if (execvp(cmd1[0], cmd1) == -1) {
-            perror("Error ejecutando primer comando");
+    // Parsea cada comando y sus argumentos
+    for (int i = 0; i < num_commands; i++) {
+        parse_command(commands[i], args[i]);
+    }
+
+    // Crea pipes necesarios
+    for (int i = 0; i < num_commands - 1; i++) {
+        if (pipe(pipefd[i]) == -1) {
+            perror("Error creando pipe");
+            exit(EXIT_FAILURE);
         }
-        exit(EXIT_FAILURE);
     }
 
-    pid2 = fork();
-    if (pid2 == 0) { // Segundo proceso
-        dup2(pipefd[0], STDIN_FILENO);
-        close(pipefd[1]);
-        close(pipefd[0]);
-        if (execvp(cmd2[0], cmd2) == -1) {
-            perror("Error ejecutando segundo comando");
+    // Itera sobre cada comando y crea un proceso hijo para ejecutarlo
+    for (int i = 0; i < num_commands; i++) {
+        pid_t pid = fork();
+
+        if (pid == 0) { // Proceso hijo
+            // Si no es el primer comando, redirige la entrada del pipe anterior
+            if (i > 0) {
+                dup2(pipefd[i - 1][0], STDIN_FILENO);
+            }
+            // Si no es el último comando, redirige la salida al siguiente pipe
+            if (i < num_commands - 1) {
+                dup2(pipefd[i][1], STDOUT_FILENO);
+            }
+
+            // Cierra los pipes
+            for (int j = 0; j < num_commands - 1; j++) {
+                close(pipefd[j][0]);
+                close(pipefd[j][1]);
+            }
+
+            // Ejecuta el comando
+            if (execvp(args[i][0], args[i]) == -1) {
+                perror("Error ejecutando comando");
+                exit(EXIT_FAILURE);
+            }
+        } else if (pid < 0) { // Error en fork
+            perror("Error en fork");
+            exit(EXIT_FAILURE);
         }
-        exit(EXIT_FAILURE);
     }
 
-    close(pipefd[0]);
-    close(pipefd[1]);
-    wait(NULL);
-    wait(NULL);
+    // Cerrar pipes en el proceso padre
+    for (int i = 0; i < num_commands - 1; i++) {
+        close(pipefd[i][0]);
+        close(pipefd[i][1]);
+    }
+
+    // Esperar a que todos los procesos hijos terminen
+    for (int i = 0; i < num_commands; i++) {
+        wait(NULL);
+    }
 }
 
