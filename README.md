@@ -3,6 +3,7 @@
 ## Descripción
 
 Shell en C con gestión de comandos personalizados y soporte para pipes.
+
 Integrantes: Ignacio Barria Concha
              Vicente Cuello Diban
              Maximiliano Lopez Becerra
